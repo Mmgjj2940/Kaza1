@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kaza - منصة فحص الهويات</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<style>
+:root{--bg:#f4f7f9;--card:#fff;--ink:#1a1e24;--mute:#64748b;--line:#e2e8f0;--pri:#0056A3;--sec:#7A459A;--ok:#1b7f5c;--bad:#e53e3e}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 "IBM Plex Sans Arabic",Tahoma,sans-serif;margin:0;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px;}
+.top{width:100%;max-width:500px;display:flex;align-items:center;justify-content:center;flex-direction:column;margin-bottom:20px;}
+.kaza-name{font-family:'Poppins',sans-serif;font-size:28px;font-weight:700;color:var(--pri);line-height:1;}
+.kaza-sub{font-family:'Poppins',sans-serif;font-size:10px;color:var(--mute);letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:500px;box-shadow:0 10px 25px rgba(0,0,0,0.05);margin-bottom:20px;}
+input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px;text-align:center;font-size:18px;letter-spacing:2px;}
+input:focus{outline:2px solid var(--pri);}
+.btn{background:var(--pri);color:#fff;border:0;border-radius:10px;padding:12px;font:inherit;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px;}
+.btn.outline{background:none;color:var(--pri);border:2px solid var(--pri);margin-top:10px;}
+.icon { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.result{display:none;margin-top:20px;border-radius:12px;padding:20px;text-align:center;animation:fadeIn 0.3s;}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.res-ok{border:2px solid var(--ok);background:#f0fdf4;}
+.res-no{border:2px solid var(--bad);background:#fef2f2;}
+.res-title{font-size:20px;font-weight:bold;margin-bottom:15px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.res-ok .res-title{color:var(--ok);}
+.res-no .res-title{color:var(--bad);}
+.res-data{text-align:right;background:#fff;padding:15px;border-radius:8px;border:1px solid var(--line);}
+.res-data div{margin-bottom:8px;border-bottom:1px dashed var(--line);padding-bottom:8px;display:flex;}
+.res-data div:last-child{border:0;margin:0;padding:0;}
+.res-data span.lbl{color:var(--mute);width:80px;font-weight:500;}
+.res-data span.val{font-weight:700;flex:1;}
+.qr-scanner{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:100;display:none;flex-direction:column;}
+.qr-scanner video{flex:1;object-fit:cover;width:100%;height:100%;}
+.close-scan{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);background:#e53e3e;color:#fff;border:0;padding:12px 30px;border-radius:30px;font-weight:bold;font-size:16px;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="kaza-name">Kaza</div>
+  <div class="kaza-sub">Identity Verification System</div>
+</div>
+
+<div class="card">
+  <h3 style="text-align:center;margin-top:0;color:var(--pri);">فحص هوية الطالب</h3>
+  <p style="text-align:center;color:var(--mute);font-size:13px;margin-bottom:20px;">أدخل كود الهوية يدوياً، أو قم بمسح الباركود بالكاميرا للتأكد من صحة البطاقة.</p>
+  
+  <input id="codeInput" type="text" dir="ltr" placeholder="ZC-XXXXXXXX" autocomplete="off">
+  
+  <button class="btn" onclick="checkCode(document.getElementById('codeInput').value)">
+    <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    فحص الهوية (يدوي)
+  </button>
+  
+  <button class="btn outline" onclick="startScanner()">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+    مسح بالكاميرا
+  </button>
+</div>
+
+<!-- نتيجة الفحص -->
+<div id="resultBox" class="result">
+  <div id="resTitle" class="res-title"></div>
+  <div id="resData" class="res-data"></div>
+</div>
+
+<!-- شاشة الكاميرا -->
+<div id="scanner" class="qr-scanner">
+  <video id="video" playsinline autoplay muted></video>
+  <button class="close-scan" onclick="stopScanner()">إغلاق الكاميرا</button>
+</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getFirestore, doc, getDoc} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const app=initializeApp({
+  apiKey: "AIzaSyDBsmT0vcNCnMHi5uFLp4FtnVXWwhs0zcE",
+  authDomain: "usta-e9427.firebaseapp.com",
+  projectId: "usta-e9427",
+  storageBucket: "usta-e9427.firebasestorage.app",
+  messagingSenderId: "429097802965",
+  appId: "1:429097802965:web:975eda9f25c0fd243d965c"
+});
+const db = getFirestore(app);
+
+window.checkCode = async function(rawCode) {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) {
+    alert("الرجاء إدخال الكود أولاً");
+    return;
+  }
+
+  const resBox = document.getElementById('resultBox');
+  const resTitle = document.getElementById('resTitle');
+  const resData = document.getElementById('resData');
+  
+  resBox.style.display = 'block';
+  resBox.className = 'result';
+  resTitle.innerHTML = 'جارٍ الفحص...';
+
+  try {
+    const cardDoc = await getDoc(doc(db, 'cards', code));
+    
+    if (cardDoc.exists()) {
+      const data = cardDoc.data();
+      const date = data.ts ? new Date(data.ts.toMillis()).toLocaleDateString('ar-EG') : 'غير معروف';
+      
+      resBox.classList.add('res-ok');
+      resTitle.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" style="color:var(--ok)"><polyline points="20 6 9 17 4 12"/></svg>
+        هوية صالحة وموثقة
+      `;
+      resData.innerHTML = `
+        <div><span class="lbl">الاسم:</span> <span class="val">${data.name}</span></div>
+        <div><span class="lbl">القسم:</span> <span class="val">${data.dep}</span></div>
+        <div><span class="lbl">الجامعة:</span> <span class="val">${data.uni || 'غير مسجل'}</span></div>
+        <div><span class="lbl">الهاتف:</span> <span class="val" dir="ltr">***${String(data.phone).slice(-4)}</span></div>
+        <div><span class="lbl">الوثيقة:</span> <span class="val">${data.doc}</span></div>
+        <div><span class="lbl">تاريخ الإصدار:</span> <span class="val">${date}</span></div>
+      `;
+    } else {
+      resBox.classList.add('res-no');
+      resTitle.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" style="color:var(--bad)"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        هوية غير موجودة / مزورة
+      `;
+      resData.innerHTML = `<div style="text-align:center;color:var(--mute)">هذا الكود غير مسجل في قاعدة بيانات منصة Kaza.</div>`;
+    }
+  } catch (error) {
+    console.error(error);
+    resTitle.innerHTML = 'حدث خطأ في الاتصال بالخادم';
+  }
+};
+
+/* --- كود الكاميرا المعدل --- */
+let videoStream = null;
+let scanning = false;
+
+window.startScanner = async function() {
+  const scannerDiv = document.getElementById('scanner');
+  const video = document.getElementById('video');
+  
+  // التحقق من وجود دعم الكاميرا
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("عذراً، متصفحك لا يدعم الكاميرا، أو أنك تفتح الملف مباشرة بدون سيرفر (HTTPS). استخدم الإدخال اليدوي.");
+    return;
+  }
+
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } // الكاميرا الخلفية
+    });
+    scannerDiv.style.display = 'flex';
+    video.srcObject = videoStream;
+    await video.play();
+    scanning = true;
+    requestAnimationFrame(tick);
+  } catch (err) {
+    console.error("Camera error:", err);
+    if (err.name === 'NotAllowedError') {
+      alert("تم رفض الوصول للكاميرا. يرجى السماح للمتصفح باستخدام الكاميرا من الإعدادات.");
+    } else if (err.name === 'NotFoundError') {
+      alert("لم يتم العثور على كاميرا في هذا الجهاز.");
+    } else {
+      alert("تعذر فتح الكاميرا. تذكر أن الكاميرا تعمل فقط على الروابط التي تبدأ بـ https://");
+    }
+  }
+};
+
+window.stopScanner = function() {
+  scanning = false;
+  const scannerDiv = document.getElementById('scanner');
+  scannerDiv.style.display = 'none';
+  if (videoStream) {
+    videoStream.getTracks().forEach(t => t.stop());
+  }
+};
+
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+function tick() {
+  if (!scanning) return;
+  const video = document.getElementById('video');
+  
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
+    
+    if (code) {
+      stopScanner();
+      document.getElementById('codeInput').value = code.data;
+      checkCode(code.data);
+      return;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+</script>
+</body>
+</html>
